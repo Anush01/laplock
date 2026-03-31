@@ -14,12 +14,15 @@ LapLock fixes this. It silently watches for macOS lock/unlock events and pushes 
 ┌──────────────┐       POST        ┌──────────┐       SSE        ┌──────────────┐
 │   MacBook    │ ──────────────▶   │  ntfy.sh │ ──────────────▶  │  Your Phone  │
 │  (daemon)    │  lock/unlock      │ (public) │   live updates   │  (browser)   │
+│              │ ◀──────────────   │          │ ◀──────────────   │              │
+│              │  lock command     │          │  "Lock Now" btn   │              │
 └──────────────┘                   └──────────┘                  └──────────────┘
 ```
 
 1. A lightweight Swift daemon listens for native macOS lock/unlock notifications
 2. On each event, it sends the status to a private [ntfy.sh](https://ntfy.sh) topic
 3. A static HTML page on your phone fetches the latest status and stays updated via Server-Sent Events
+4. **Remote lock**: press the "Lock Now" button on your phone to lock your Mac remotely
 
 No accounts. No servers to run. No app to install on your phone — just a web page.
 
@@ -61,6 +64,16 @@ That's it. Lock your Mac to test it.
 **Option B** — Open `index.html` locally or host it anywhere you like.
 
 The page connects to ntfy.sh via SSE for live updates. When you revisit the page, it fetches the latest status instantly.
+
+---
+
+## Remote Lock
+
+When your MacBook is unlocked, the status page shows a **"Lock Now"** button. Press it to lock your Mac remotely — the command goes through ntfy.sh to the daemon, which triggers the native macOS lock screen (Ctrl+Cmd+Q).
+
+**First-time setup**: macOS will prompt you to grant Accessibility access to the daemon (System Settings > Privacy & Security > Accessibility). This is required for sending the lock keystroke.
+
+No extra configuration needed — it uses the same ntfy topic.
 
 ---
 

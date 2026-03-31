@@ -67,6 +67,20 @@
             background: none; border: none; font-size: 1.2rem;
             cursor: pointer; opacity: 0.4;
         }
+        .lock-btn {
+            margin-top: 2rem;
+            padding: 1rem 2.5rem;
+            font-size: 1.2rem;
+            font-weight: 700;
+            border: none;
+            border-radius: 12px;
+            background: rgba(0,0,0,0.25);
+            color: inherit;
+            cursor: pointer;
+            transition: opacity 0.2s, transform 0.1s;
+        }
+        .lock-btn:active { transform: scale(0.95); }
+        .lock-btn:disabled { opacity: 0.4; cursor: not-allowed; }
     </style>
 </head>
 <body class="unknown">
@@ -83,6 +97,7 @@
         <div class="status" id="statusText">Connecting...</div>
         <div class="time" id="timeText"></div>
         <div class="detail" id="detailText"></div>
+        <button class="lock-btn" id="lockBtn" style="display:none;" onclick="sendLockCommand()">Lock Now</button>
     </div>
 
     <button class="change-topic" id="changeBtn" style="display:none;" onclick="changeTopic()">⚙️</button>
@@ -94,6 +109,25 @@
 
     <script>
         let evtSource = null;
+        let currentTopic = null;
+
+        async function sendLockCommand() {
+            if (!currentTopic) return;
+            const btn = document.getElementById('lockBtn');
+            btn.disabled = true;
+            btn.textContent = 'Sending...';
+            try {
+                await fetch(`https://ntfy.sh/${currentTopic}`, {
+                    method: 'POST',
+                    headers: { 'Title': 'Lock Command', 'Tags': 'cmd_lock' },
+                    body: 'Remote lock requested'
+                });
+                btn.textContent = 'Lock sent';
+            } catch (e) {
+                btn.textContent = 'Failed - try again';
+                btn.disabled = false;
+            }
+        }
 
         function saveTopic() {
             const topic = document.getElementById('topicInput').value.trim();
@@ -112,6 +146,7 @@
         }
 
         function start(topic) {
+            currentTopic = topic;
             document.getElementById('setup').style.display = 'none';
             document.getElementById('card').style.display = '';
             document.getElementById('changeBtn').style.display = '';
@@ -176,6 +211,16 @@
                 document.getElementById('timeText').textContent = ago;
             }
             document.getElementById('detailText').textContent = msg.message || '';
+
+            // Show lock button only when unlocked
+            const lockBtn = document.getElementById('lockBtn');
+            if (status === 'unlocked') {
+                lockBtn.style.display = '';
+                lockBtn.disabled = false;
+                lockBtn.textContent = 'Lock Now';
+            } else {
+                lockBtn.style.display = 'none';
+            }
         }
 
         function relativeTime(unixSeconds) {

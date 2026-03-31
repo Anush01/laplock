@@ -59,7 +59,54 @@ dnc.addObserver(forName: NSNotification.Name("com.apple.screenIsUnlocked"), obje
     sendStatus("unlocked")
 }
 
+// MARK: - Remote lock
+
+func lockScreen() {
+    fputs("Executing remote lock...\n", stderr)
+    let task = Process()
+    task.launchPath = "/usr/bin/osascript"
+    task.arguments = ["-e", "tell application \"System Events\" to keystroke \"q\" using {control down, command down}"]
+    task.launch()
+}
+
+// MARK: - Poll ntfy for lock commands
+
+var lastProcessedId: String = ""
+
+func pollForCommands() {
+    guard let url = URL(string: "https://ntfy.sh/\(topic)/json?poll=1&since=10s") else { return }
+    URLSession.shared.dataTask(with: url) { data, _, error in
+        guard let data = data, error == nil,
+              let text = String(data: data, encoding: .utf8) else { return }
+
+        let lines = text.split(separator: "\n")
+        for line in lines {
+            guard let msgData = line.data(using: .utf8),
+                  let json = try? JSONSerialization.jsonObject(with: msgData) as? [String: Any],
+                  let event = json["event"] as? String, event == "message",
+                  let id = json["id"] as? String, id != lastProcessedId,
+                  let tags = json["tags"] as? [String], tags.contains("cmd_lock") else {
+                continue
+            }
+            // Skip messages from the daemon itself
+            if let title = json["title"] as? String, title.hasPrefix("MacBook:") {
+                continue
+            }
+            lastProcessedId = id
+            fputs("Received remote lock command (id: \(id))\n", stderr)
+            DispatchQueue.main.async {
+                lockScreen()
+            }
+        }
+    }.resume()
+}
+
 // MARK: - Startup
 
 sendStatus("started")
+
+Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { _ in
+    pollForCommands()
+}
+
 RunLoop.main.run()
