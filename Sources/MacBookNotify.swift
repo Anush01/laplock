@@ -1,4 +1,5 @@
 import Foundation
+import ApplicationServices
 
 // MARK: - Configuration
 
@@ -22,6 +23,16 @@ let topic = resolveConfig("TOPIC", filePath: "~/.config/macbook-notify/topic")!
 let authToken: String? = resolveConfig("AUTH_TOKEN", filePath: "~/.config/macbook-notify/token", required: false)
 
 fputs("macbook-notify started — server: \(serverURL), topic: \(topic), auth: \(authToken != nil ? "yes" : "no")\n", stderr)
+
+// Check Accessibility permissions (needed for remote lock via osascript)
+if AXIsProcessTrusted() {
+    fputs("Accessibility: trusted\n", stderr)
+} else {
+    fputs("WARNING: Accessibility not granted. Remote lock will fail.\n", stderr)
+    fputs("Grant access: System Settings > Privacy & Security > Accessibility > add this binary\n", stderr)
+    let opts = [kAXTrustedCheckOptionPrompt.takeUnretainedValue(): true] as CFDictionary
+    _ = AXIsProcessTrustedWithOptions(opts)
+}
 
 // MARK: - Send status
 
@@ -73,11 +84,23 @@ dnc.addObserver(forName: NSNotification.Name("com.apple.screenIsUnlocked"), obje
 // MARK: - Remote lock
 
 func lockScreen() {
+    if !AXIsProcessTrusted() {
+        fputs("ERROR: Cannot lock — Accessibility not granted. Add this binary in System Settings > Privacy & Security > Accessibility\n", stderr)
+        return
+    }
     fputs("Executing remote lock...\n", stderr)
     let task = Process()
+    let errPipe = Pipe()
+    task.standardError = errPipe
     task.launchPath = "/usr/bin/osascript"
     task.arguments = ["-e", "tell application \"System Events\" to keystroke \"q\" using {control down, command down}"]
     task.launch()
+    task.waitUntilExit()
+    if task.terminationStatus != 0 {
+        let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
+        let errStr = String(data: errData, encoding: .utf8) ?? "unknown error"
+        fputs("Lock failed (exit \(task.terminationStatus)): \(errStr)\n", stderr)
+    }
 }
 
 // MARK: - Poll for lock commands

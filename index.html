@@ -119,11 +119,12 @@
             btn.disabled = true;
             btn.textContent = 'Sending...';
             try {
-                await fetch(`${currentConfig.serverUrl}/publish/${currentConfig.topic}`, {
+                const resp = await fetch(`${currentConfig.serverUrl}/publish/${currentConfig.topic}`, {
                     method: 'POST',
                     headers: { 'Title': 'Lock Command', 'Tags': 'cmd_lock' },
                     body: 'Remote lock requested'
                 });
+                if (!resp.ok) throw new Error(`Server returned ${resp.status}`);
                 btn.textContent = 'Lock sent';
             } catch (e) {
                 btn.textContent = 'Failed - try again';
@@ -192,7 +193,7 @@
             evtSource.onmessage = (e) => {
                 try {
                     const msg = JSON.parse(e.data);
-                    if (msg.event === 'message') updateUI(msg);
+                    if (msg.event === 'message' && (msg.title || '').startsWith('MacBook:')) updateUI(msg);
                 } catch (err) { /* ignore */ }
             };
         }
