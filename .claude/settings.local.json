@@ -7,7 +7,9 @@
       "Read(//Users/anush/.config/macbook-notify/**)",
       "Bash(swiftc -O Sources/MacBookNotify.swift -o macbook-notify)",
       "Bash(mkdir -p /Users/anush/.config/macbook-notify)",
-      "Bash(chmod 600 /Users/anush/.config/macbook-notify/token)"
+      "Bash(chmod 600 /Users/anush/.config/macbook-notify/token)",
+      "WebSearch",
+      "Bash(npm install:*)"
     ]
   }
 }
