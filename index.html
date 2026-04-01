@@ -51,6 +51,7 @@
             width: 100%;
         }
         .setup h1 { font-size: 1.5rem; margin-bottom: 1rem; color: #eee; }
+        .setup p { color: #aaa; margin-bottom: 1rem; }
         .setup input {
             width: 100%; padding: 0.75rem; font-size: 1rem;
             border: 2px solid #444; border-radius: 8px;
@@ -86,10 +87,11 @@
 <body class="unknown">
     <div class="setup" id="setup">
         <h1>MacBook Status</h1>
-        <p style="color:#aaa;margin-bottom:1rem;">Enter your ntfy topic to get started</p>
-        <input type="text" id="topicInput" placeholder="your-ntfy-topic" autocapitalize="none" autocorrect="off">
+        <p>Enter your server URL and topic to get started</p>
+        <input type="url" id="serverInput" placeholder="https://your-server.onrender.com" autocapitalize="none" autocorrect="off">
+        <input type="text" id="topicInput" placeholder="your-topic" autocapitalize="none" autocorrect="off">
         <br>
-        <button onclick="saveTopic()">Connect</button>
+        <button onclick="saveConfig()">Connect</button>
     </div>
 
     <div class="card" id="card" style="display:none;">
@@ -100,7 +102,7 @@
         <button class="lock-btn" id="lockBtn" style="display:none;" onclick="sendLockCommand()">Lock Now</button>
     </div>
 
-    <button class="change-topic" id="changeBtn" style="display:none;" onclick="changeTopic()">⚙️</button>
+    <button class="change-topic" id="changeBtn" style="display:none;" onclick="changeConfig()">⚙️</button>
 
     <div class="footer">
         <span class="live-dot" id="liveDot" style="display:none;"></span>
@@ -109,15 +111,15 @@
 
     <script>
         let evtSource = null;
-        let currentTopic = null;
+        let currentConfig = null;
 
         async function sendLockCommand() {
-            if (!currentTopic) return;
+            if (!currentConfig) return;
             const btn = document.getElementById('lockBtn');
             btn.disabled = true;
             btn.textContent = 'Sending...';
             try {
-                await fetch(`https://ntfy.sh/${currentTopic}`, {
+                await fetch(`${currentConfig.serverUrl}/publish/${currentConfig.topic}`, {
                     method: 'POST',
                     headers: { 'Title': 'Lock Command', 'Tags': 'cmd_lock' },
                     body: 'Remote lock requested'
@@ -129,15 +131,17 @@
             }
         }
 
-        function saveTopic() {
+        function saveConfig() {
+            const serverUrl = document.getElementById('serverInput').value.trim().replace(/\/+$/, '');
             const topic = document.getElementById('topicInput').value.trim();
-            if (!topic) return;
-            localStorage.setItem('ntfy_topic', topic);
-            start(topic);
+            if (!serverUrl || !topic) return;
+            const config = { serverUrl, topic };
+            localStorage.setItem('macbook_notify_config', JSON.stringify(config));
+            start(config);
         }
 
-        function changeTopic() {
-            localStorage.removeItem('ntfy_topic');
+        function changeConfig() {
+            localStorage.removeItem('macbook_notify_config');
             if (evtSource) evtSource.close();
             document.getElementById('setup').style.display = '';
             document.getElementById('card').style.display = 'none';
@@ -145,21 +149,21 @@
             document.body.className = 'unknown';
         }
 
-        function start(topic) {
-            currentTopic = topic;
+        function start(config) {
+            currentConfig = config;
             document.getElementById('setup').style.display = 'none';
             document.getElementById('card').style.display = '';
             document.getElementById('changeBtn').style.display = '';
-            fetchLatest(topic);
-            connectSSE(topic);
+            fetchLatest(config);
+            connectSSE(config);
             document.addEventListener('visibilitychange', () => {
-                if (!document.hidden) fetchLatest(topic);
+                if (!document.hidden) fetchLatest(config);
             });
         }
 
-        async function fetchLatest(topic) {
+        async function fetchLatest(config) {
             try {
-                const resp = await fetch(`https://ntfy.sh/${topic}/json?poll=1&since=24h`);
+                const resp = await fetch(`${config.serverUrl}/poll/${config.topic}?since=24h`);
                 const text = await resp.text();
                 const lines = text.trim().split('\n').filter(Boolean);
                 for (let i = lines.length - 1; i >= 0; i--) {
@@ -174,9 +178,9 @@
             }
         }
 
-        function connectSSE(topic) {
+        function connectSSE(config) {
             if (evtSource) evtSource.close();
-            evtSource = new EventSource(`https://ntfy.sh/${topic}/sse`);
+            evtSource = new EventSource(`${config.serverUrl}/sse/${config.topic}`);
             evtSource.onopen = () => {
                 document.getElementById('liveDot').style.display = 'inline-block';
                 document.getElementById('connText').textContent = 'live';
@@ -205,14 +209,12 @@
             document.getElementById('statusText').textContent = status;
             document.body.className = status;
 
-            // Relative time
             if (msg.time) {
                 const ago = relativeTime(msg.time);
                 document.getElementById('timeText').textContent = ago;
             }
             document.getElementById('detailText').textContent = msg.message || '';
 
-            // Show lock button only when unlocked
             const lockBtn = document.getElementById('lockBtn');
             if (status === 'unlocked') {
                 lockBtn.style.display = '';
@@ -232,16 +234,14 @@
             return `${Math.floor(diff / 86400)}d ago`;
         }
 
-        // Update relative time every 10s
-        setInterval(() => {
-            // Re-display already shown time would need storing the timestamp;
-            // the SSE/fetch will keep it fresh enough
-        }, 10000);
-
         // Init
-        const saved = localStorage.getItem('ntfy_topic');
+        const saved = localStorage.getItem('macbook_notify_config');
         if (saved) {
-            start(saved);
+            try {
+                start(JSON.parse(saved));
+            } catch (e) {
+                localStorage.removeItem('macbook_notify_config');
+            }
         }
     </script>
 </body>

@@ -2,37 +2,31 @@ import Foundation
 
 // MARK: - Configuration
 
-func resolveTopic() -> String {
-    if let topic = ProcessInfo.processInfo.environment["NTFY_TOPIC"], !topic.isEmpty {
-        return topic
+func resolveConfig(_ envKey: String, filePath: String, required: Bool = true) -> String? {
+    if let val = ProcessInfo.processInfo.environment[envKey], !val.isEmpty {
+        return val
     }
-    let configPath = NSString(string: "~/.config/macbook-notify/topic").expandingTildeInPath
-    if let topic = try? String(contentsOfFile: configPath, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines), !topic.isEmpty {
-        return topic
+    let path = NSString(string: filePath).expandingTildeInPath
+    if let val = try? String(contentsOfFile: path, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines), !val.isEmpty {
+        return val
     }
-    fputs("ERROR: No ntfy topic configured. Set NTFY_TOPIC env var or write topic to ~/.config/macbook-notify/topic\n", stderr)
-    exit(1)
-}
-
-let topic = resolveTopic()
-
-let ntfyToken: String? = {
-    if let token = ProcessInfo.processInfo.environment["NTFY_TOKEN"], !token.isEmpty {
-        return token
-    }
-    let tokenPath = NSString(string: "~/.config/macbook-notify/token").expandingTildeInPath
-    if let token = try? String(contentsOfFile: tokenPath, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines), !token.isEmpty {
-        return token
+    if required {
+        fputs("ERROR: \(envKey) not configured. Set \(envKey) env var or write to \(filePath)\n", stderr)
+        exit(1)
     }
     return nil
-}()
+}
 
-fputs("macbook-notify started with topic: \(topic), auth: \(ntfyToken != nil ? "yes" : "no")\n", stderr)
+let serverURL = resolveConfig("SERVER_URL", filePath: "~/.config/macbook-notify/server_url")!
+let topic = resolveConfig("TOPIC", filePath: "~/.config/macbook-notify/topic")!
+let authToken: String? = resolveConfig("AUTH_TOKEN", filePath: "~/.config/macbook-notify/token", required: false)
 
-// MARK: - Send status to ntfy.sh
+fputs("macbook-notify started — server: \(serverURL), topic: \(topic), auth: \(authToken != nil ? "yes" : "no")\n", stderr)
+
+// MARK: - Send status
 
 func sendStatus(_ status: String) {
-    guard let url = URL(string: "https://ntfy.sh/\(topic)") else { return }
+    guard let url = URL(string: "\(serverURL)/publish/\(topic)") else { return }
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
     request.setValue("MacBook: \(status)", forHTTPHeaderField: "Title")
@@ -44,7 +38,7 @@ func sendStatus(_ status: String) {
     default: tag = "computer"
     }
     request.setValue(tag, forHTTPHeaderField: "Tags")
-    if let token = ntfyToken {
+    if let token = authToken {
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
     }
 
@@ -55,9 +49,9 @@ func sendStatus(_ status: String) {
 
     URLSession.shared.dataTask(with: request) { _, response, error in
         if let error = error {
-            fputs("ntfy error: \(error.localizedDescription)\n", stderr)
-        } else if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode != 200 {
-            fputs("ntfy HTTP \(httpResponse.statusCode) sending \(status)\n", stderr)
+            fputs("Server error: \(error.localizedDescription)\n", stderr)
+        } else if let httpResponse = response as? HTTPURLResponse, !(200...299).contains(httpResponse.statusCode) {
+            fputs("Server HTTP \(httpResponse.statusCode) sending \(status)\n", stderr)
         } else {
             fputs("Sent status: \(status)\n", stderr)
         }
@@ -86,14 +80,14 @@ func lockScreen() {
     task.launch()
 }
 
-// MARK: - Poll ntfy for lock commands
+// MARK: - Poll for lock commands
 
 var lastProcessedId: String = ""
 
 func pollForCommands() {
-    guard let url = URL(string: "https://ntfy.sh/\(topic)/json?poll=1&since=10s") else { return }
+    guard let url = URL(string: "\(serverURL)/poll/\(topic)?since=10s") else { return }
     var request = URLRequest(url: url)
-    if let token = ntfyToken {
+    if let token = authToken {
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
     }
     URLSession.shared.dataTask(with: request) { data, _, error in
@@ -109,7 +103,6 @@ func pollForCommands() {
                   let tags = json["tags"] as? [String], tags.contains("cmd_lock") else {
                 continue
             }
-            // Skip messages from the daemon itself
             if let title = json["title"] as? String, title.hasPrefix("MacBook:") {
                 continue
             }
