@@ -15,7 +15,19 @@ func resolveTopic() -> String {
 }
 
 let topic = resolveTopic()
-fputs("macbook-notify started with topic: \(topic)\n", stderr)
+
+let ntfyToken: String? = {
+    if let token = ProcessInfo.processInfo.environment["NTFY_TOKEN"], !token.isEmpty {
+        return token
+    }
+    let tokenPath = NSString(string: "~/.config/macbook-notify/token").expandingTildeInPath
+    if let token = try? String(contentsOfFile: tokenPath, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines), !token.isEmpty {
+        return token
+    }
+    return nil
+}()
+
+fputs("macbook-notify started with topic: \(topic), auth: \(ntfyToken != nil ? "yes" : "no")\n", stderr)
 
 // MARK: - Send status to ntfy.sh
 
@@ -32,15 +44,20 @@ func sendStatus(_ status: String) {
     default: tag = "computer"
     }
     request.setValue(tag, forHTTPHeaderField: "Tags")
+    if let token = ntfyToken {
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+    }
 
     let hostname = Host.current().localizedName ?? "Mac"
     let timestamp = ISO8601DateFormatter().string(from: Date())
     let body = "\(hostname) — \(timestamp)"
     request.httpBody = body.data(using: .utf8)
 
-    URLSession.shared.dataTask(with: request) { _, _, error in
+    URLSession.shared.dataTask(with: request) { _, response, error in
         if let error = error {
             fputs("ntfy error: \(error.localizedDescription)\n", stderr)
+        } else if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode != 200 {
+            fputs("ntfy HTTP \(httpResponse.statusCode) sending \(status)\n", stderr)
         } else {
             fputs("Sent status: \(status)\n", stderr)
         }
@@ -75,7 +92,11 @@ var lastProcessedId: String = ""
 
 func pollForCommands() {
     guard let url = URL(string: "https://ntfy.sh/\(topic)/json?poll=1&since=10s") else { return }
-    URLSession.shared.dataTask(with: url) { data, _, error in
+    var request = URLRequest(url: url)
+    if let token = ntfyToken {
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+    }
+    URLSession.shared.dataTask(with: request) { data, _, error in
         guard let data = data, error == nil,
               let text = String(data: data, encoding: .utf8) else { return }
 

@@ -13,6 +13,8 @@
     <dict>
         <key>NTFY_TOPIC</key>
         <string>__NTFY_TOPIC__</string>
+        <key>NTFY_TOKEN</key>
+        <string>__NTFY_TOKEN__</string>
     </dict>
     <key>RunAtLoad</key>
     <true/>

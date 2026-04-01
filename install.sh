@@ -45,6 +45,27 @@ echo ""
 echo "Using topic: $TOPIC"
 echo ""
 
+# Get ntfy token (optional, for authenticated access)
+if [ -f "$CONFIG_DIR/token" ]; then
+    EXISTING_TOKEN=$(cat "$CONFIG_DIR/token" | tr -d '[:space:]')
+    echo "Existing ntfy token found."
+    read -p "Use existing token? [Y/n]: " USE_EXISTING_TOKEN
+    if [ "$USE_EXISTING_TOKEN" != "n" ] && [ "$USE_EXISTING_TOKEN" != "N" ]; then
+        NTFY_TOKEN="$EXISTING_TOKEN"
+    fi
+fi
+
+if [ -z "$NTFY_TOKEN" ]; then
+    read -p "Enter ntfy access token (or press Enter to skip): " NTFY_TOKEN
+fi
+
+if [ -n "$NTFY_TOKEN" ]; then
+    echo "Token configured."
+else
+    echo "No token — using anonymous access (free-tier rate limits apply)."
+fi
+echo ""
+
 # Compile
 echo "Compiling..."
 swiftc -O "$SCRIPT_DIR/Sources/MacBookNotify.swift" -o "$SCRIPT_DIR/$BINARY_NAME"
@@ -59,14 +80,19 @@ echo "Installed binary to $INSTALL_DIR/$BINARY_NAME"
 # Create log directory
 mkdir -p "$LOG_DIR"
 
-# Save topic to config
+# Save config
 mkdir -p "$CONFIG_DIR"
 echo "$TOPIC" > "$CONFIG_DIR/topic"
+if [ -n "$NTFY_TOKEN" ]; then
+    echo "$NTFY_TOKEN" > "$CONFIG_DIR/token"
+    chmod 600 "$CONFIG_DIR/token"
+fi
 
 # Generate and install plist
 sed \
     -e "s|__BINARY_PATH__|$INSTALL_DIR/$BINARY_NAME|g" \
     -e "s|__NTFY_TOPIC__|$TOPIC|g" \
+    -e "s|__NTFY_TOKEN__|${NTFY_TOKEN}|g" \
     -e "s|__HOME__|$HOME|g" \
     "$SCRIPT_DIR/com.macbook-notify.agent.plist" > "$PLIST_DEST"
 

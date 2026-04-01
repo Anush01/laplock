@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s \"https://ntfy.sh/anushlap3/json?poll=1&since=30s\")",
+      "Bash(swiftc -o macbook-notify Sources/MacBookNotify.swift)",
+      "Bash(curl:*)",
+      "Read(//Users/anush/.config/macbook-notify/**)",
+      "Bash(swiftc -O Sources/MacBookNotify.swift -o macbook-notify)",
+      "Bash(mkdir -p /Users/anush/.config/macbook-notify)",
+      "Bash(chmod 600 /Users/anush/.config/macbook-notify/token)"
+    ]
+  }
+}
